@@ -14,9 +14,9 @@ class Message:
         # Store the prefix with no leading ':'. Can be None if no prefix was
         # present.
         self.prefix = None
-        # Command string.
+        # IRC command string.
         self.command = None
-        # Command arguments.
+        # IRC command arguments.
         self.command_args = None
         if raw_msg is not None:
             self.Parse(raw_msg)
@@ -37,7 +37,7 @@ class Message:
         return True
 
     def __repr__(self):
-        return 'IRCMessage(prefix="%s", command="%s", command_args="%s")' % (
+        return 'Message(prefix="%s", command="%s", command_args="%s")' % (
                 self.prefix, self.command, self.command_args)
 
 
@@ -141,15 +141,16 @@ class Client:
             self._handler.HandleMessage(msg)
 
 
-class Handler:
-    """Handles various IRC messages with some default logic.
+class HandlerBase:
+    """Base IRC message handler class.
 
-    Can be derived from to change default behaviour and/or add handling for
+    Should be derived to change default behaviour and/or add handling for
     commands not already handled. All handler methods are of the form
     Handle<type> where <type> is an IRC message type, in capital letters. They
     all receive the IRC message they are supposed to handle. A special
     HandleDefault() is used to handle any messages types that have no specific
-    handler.
+    handler. Every Handle*() function should return True/False, True meaning
+    that the message has been successfully handled.
     """
     def __init__(self, conn):
         self._conn = conn
@@ -163,27 +164,19 @@ class Handler:
         return handler(msg)
 
     def HandleDefault(self, msg):
-        logging.debug('default handling %s: %s' %
-                      (msg.command, msg.command_args))
+        return False
 
     def HandlePING(self, msg):
         self._conn.SendPong(msg.command_args)
-
-    def ParsePRIVMSG(self, msg):
-        """Helper function to be used by HandlePRIVMSG definitions."""
-        parts = msg.command_args.split(' ', maxsplit=1)
-        if len(parts) < 2:
-            logging.error('invalid PRIVMSG message: "%s"' % msg.command_args)
-            return None
-        if parts[1][0] == ':':
-            parts[1] = parts[1][1:]
-        return tuple(parts)
-
-    def HandlePRIVMSG(self, msg):
-        # PRIVMSG command arguments are formatted as "<target> :<message>".
-        parts = self.ParsePRIVMSG(msg)
-        if not parts:
-            return
-        logging.info('message "%s": "%s"' % (parts[0], parts[1]))
+        return True
 
 
+def SplitPRIVMSG(msg):
+    """Helper function to be used by HandlePRIVMSG definitions."""
+    parts = msg.command_args.split(' ', maxsplit=1)
+    if len(parts) < 2:
+        logging.error('invalid PRIVMSG message: "%s"' % msg.command_args)
+        return None
+    if parts[1][0] == ':':
+        parts[1] = parts[1][1:]
+    return tuple(parts)
