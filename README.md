@@ -9,6 +9,7 @@ It's currently in very early stages of development, it supports:
 additional IRC command support and/or changing the behavior of commands
 already handled (ex. changing `PRIVMSG` behavior to support !bot commands)
 * support for configured runtime plugins (module) loading
+* various (game specific) TwitchPlays modules
 
 ## Installation
 
