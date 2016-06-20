@@ -18,3 +18,5 @@ already handled (ex. changing `PRIVMSG` behavior to support !bot commands)
 need at least to update the `PASS` value with a valid OAuth token for the
 configured `NICK`)
 * run the bot with a command like `python3 main.py --config config_private.ini`
+* for TwitchPlays functionality see the relevant documentation in the "docs"
+directory
