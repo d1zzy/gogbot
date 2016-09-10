@@ -38,7 +38,11 @@ def main(args):
     plugin = plugin_loader.GetPlugin(config['GENERAL']['handler'])
 
     client = irc.Client(plugin.Handler(con, config))
-    client.Run()
+    try:
+        client.Run()
+    except KeyboardInterrupt:
+        logging.info('CTRL-C caught, exiting...')
+    return True
 
 
 if __name__ == '__main__':
