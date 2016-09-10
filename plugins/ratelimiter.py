@@ -71,13 +71,16 @@ class Handler(irc.HandlerBase):
             logging.warning('Got invalid PRIVMSG: %r', msg)
             return False
 
-        msg = _Message(msg.prefix.split('!', maxsplit=1)[0], parts[1])
+        msg = _Message(msg.sender, parts[1])
+        # If a filter is defined then any message not matching is ignored.
+        if self._text_filter and not self._text_filter.match(msg.text):
+            return False
+
         if (self._sender_rate and
             self._pool.CountBySender(msg.sender) >= self._sender_rate):
             self._Log('REJECT:sender-over-limit:%s', msg)
             return True
         if (self._text_rate and
-            (not self._text_filter or self._text_filter.match(msg.text)) and
             self._pool.CountByText(msg.text) >= self._text_rate):
             self._Log('REJECT:text-over-limit:%s', msg)
             return True
