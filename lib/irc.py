@@ -18,6 +18,8 @@ class Message:
         self.command = None
         # IRC command arguments.
         self.command_args = None
+        # IRC command sender.
+        self.sender = None
         if raw_msg is not None:
             self.Parse(raw_msg)
 
@@ -31,6 +33,11 @@ class Message:
         if len(parts) < 2:
             logging.error('invalid IRC message "%s"' % raw_msg)
             return False
+
+        if prefix:
+            sender = prefix.split('!', maxsplit=1)[0].strip()
+            if sender:
+                self.sender = sender
         self.prefix = prefix
         self.command = parts[0]
         self.command_args = parts[1]
