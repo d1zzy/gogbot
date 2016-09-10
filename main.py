@@ -17,7 +17,10 @@ def _ParseArguments():
     return parser.parse_args()
 
 def main(args):
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s:%(levelname).4s:%(module)s: %(message)s',
+        datefmt='%Y%m%d_%H%M%S')
 
     config = configparser.ConfigParser()
     if list(config.read(args.config)) != [args.config]:

@@ -98,7 +98,7 @@ class Connection:
         """Connect to an IRC server, authenticate and join a channel."""
         self._conn = socket.socket()
         self._conn.connect((host, port))
-        logging.debug('connected to %s:%s' % (host, port))
+        logging.debug('Connected to %s:%s' % (host, port))
 
         self._conn.send(bytes('CAP REQ :twitch.tv/membership\r\n', 'UTF-8'))
         if server_pass:
@@ -106,7 +106,7 @@ class Connection:
         self.SendNick(nickname)
         if channel:
             self.JoinChannel(channel)
-        logging.debug('joined %s' % channel)
+        logging.debug('Joined %s' % channel)
 
     def SendPong(self, msg):
         self._conn.send(bytes('PONG %s\r\n' % msg, 'UTF-8'))
@@ -217,59 +217,60 @@ class HandlerBase:
 
     def HandleJOIN(self, msg):
         if not msg.sender:
-            logging.warning('Unexpected JOIN message format: %r', msg)
+            logging.warning('[JOIN] Unexpected message format: %r', msg)
             return False
         if msg.command_args != self._conn.channel:
-            logging.warning('Received JOIN for another channel: %r',
+            logging.warning('[JOIN] Received for another channel: %r',
                             msg.command_args)
             return False
         # Process the JOIN by adding the user to the userlist.
         userlist = self._conn.GetUserList()
         if msg.sender in userlist:
-            logging.warning('User %r already part of channel %r',
+            logging.warning('[JOIN] User %r already part of channel %r',
                             msg.sender, self._conn.channel)
             return False
         userlist[msg.sender] = User(msg.sender)
-        logging.info('User %r joined %r.', msg.sender, self._conn.channel)
+        logging.info('[JOIN] User %r joined %r.', msg.sender,
+                     self._conn.channel)
         return True
 
     def HandlePART(self, msg):
         if not msg.sender:
-            logging.warning('Unexpected PART message format: %r', msg)
+            logging.warning('[PART] Unexpected message format: %r', msg)
             return False
         if msg.command_args != self._conn.channel:
-            logging.warning('Received PART for another channel: %r',
+            logging.warning('[PART] Received for another channel: %r',
                             msg.command_args)
             return False
         # Process the PART by removing the user from the userlist.
         userlist = self._conn.GetUserList()
         if msg.sender not in userlist:
-            logging.warning('User %r not part of channel %r',
+            logging.warning('[PART] User %r not part of channel %r',
                             msg.sender, self._conn.channel)
             return False
         del userlist[msg.sender]
-        logging.info('User %r left %r.', msg.sender, self._conn.channel)
+        logging.info('[PART] User %r left %r.', msg.sender, self._conn.channel)
         return True
 
     def HandleMODE(self, msg):
         parts = msg.command_args.split()
         if not msg.sender or msg.sender != 'jtv' or len(parts) != 3:
-            logging.warning('Unexpected MODE message format: %r', msg)
+            logging.warning('[MODE] Unexpected message format: %r', msg)
             return False
         chan, mode, target = parts
         if chan != self._conn.channel:
-            logging.warning('Received MODE for another channel: %r', chan)
+            logging.warning('[MODE] Received for another channel: %r', chan)
             return False
 
         # Apply the mode change to the target user.
         user = self._conn.GetUserList().get(target)
         if not user:
-            logging.warning('User %r not part of channel %r',
-                            user, self._conn.channel)
+            logging.warning('[MODE] User %r not part of channel %r',
+                            target, self._conn.channel)
             return False
         user.UpdateMode(mode)
-        logging.info('User %r updated %r to mode %r on %r.', msg.sender, target,
-                     user.mode, self._conn.channel)
+        logging.info('[MODE] User %r updated %r to mode %r on %r.', msg.sender,
+                     target, user.mode, self._conn.channel)
         return True
 
 
