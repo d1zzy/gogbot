@@ -9,6 +9,5 @@ class Handler(irc.HandlerBase):
         super().__init__(conn)
 
     def HandleDefault(self, msg):
-        logging.debug('default handling (%s,%s,%s)' %
-                      (msg.prefix, msg.command, msg.command_args))
+        logging.debug('default handling %r' % msg)
         return False
