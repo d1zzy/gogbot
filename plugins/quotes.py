@@ -19,6 +19,7 @@ class Handler(irc.HandlerBase):
 
     def __init__(self, conn, conf):
         super().__init__(conn)
+        self._client_id = conf['CONNECTION']['client_id'].lower()
         self._channel = conf['CONNECTION']['channel'].lower()
         quote_section = config.GetSection(conf, 'quotes')
         if 'db_file' not in quote_section:
@@ -101,6 +102,7 @@ class Handler(irc.HandlerBase):
         url = ('https://api.twitch.tv/kraken/channels/%s' %
                url_parse.quote(channel))
         headers = {'ACCEPT': 'application/vnd.twitchtv.v3+json',
+                   'Client-ID': self._client_id,
                    'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:6.0) '
                        'Gecko/20100101 Firefox/6.0'}
         req = requests.get(url, headers=headers)
