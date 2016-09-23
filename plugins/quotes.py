@@ -15,6 +15,8 @@ class Handler(irc.HandlerBase):
     # Regular expressions to match against supported commands.
     _GET_QUOTE_RE = re.compile(r'^!quote(?: +#?(\d+)$|$)', flags=re.IGNORECASE)
     _ADD_QUOTE_RE = re.compile(r'^!quote +add +([^ ].*)$', flags=re.IGNORECASE)
+    _RAWADD_QUOTE_RE = re.compile(r'^!quote +rawadd +([^ ].*)$',
+                                  flags=re.IGNORECASE)
     _DEL_QUOTE_RE = re.compile(r'^!quote +del +#?(\d+)$', flags=re.IGNORECASE)
 
     def __init__(self, conn, conf):
@@ -41,9 +43,15 @@ class Handler(irc.HandlerBase):
         match = self._GET_QUOTE_RE.match(command)
         if match:
             return self._HandleGetQuote(match)
+
         match = self._ADD_QUOTE_RE.match(command)
         if match:
             return self._HandleAddQuote(msg, match)
+
+        match = self._RAWADD_QUOTE_RE.match(command)
+        if match:
+            return self._HandleRawAddQuote(msg, match)
+
         match = self._DEL_QUOTE_RE.match(command)
         if match:
             return self._HandleDelQuote(msg, match)
@@ -116,6 +124,26 @@ class Handler(irc.HandlerBase):
             return None
         return game['game']
 
+    def _AddQuoteToDb(self, quote):
+        """Adds the given quote to the database."""
+        cur = self._db.cursor()
+        cur.execute('INSERT INTO %(table)s (CustomId, Text) '
+                    'SELECT max(CustomId) + 1, ? FROM %(table)s' %
+                    {'table': self._table}, (quote,))
+        cur.execute('SELECT CustomId FROM %s WHERE AutoId = ?' % self._table,
+                    (cur.lastrowid,))
+        row = cur.fetchone()
+        if not row:
+            logging.error('Failed to get last added quote')
+            self._conn.SendMessage(self._channel, 'Failed to add quote')
+            self._db.rollback()
+            return None
+
+        idx = row[0]
+        self._conn.SendMessage(self._channel, 'Added quote #%s' % idx)
+        self._db.commit()
+        return idx
+
     def _HandleAddQuote(self, msg, match):
         """Handle "!quote add ..." command."""
         if not self._AuthorizeElevatedCommand(msg.sender):
@@ -127,22 +155,20 @@ class Handler(irc.HandlerBase):
         if not game:
             return True
         text += ' [%s] [%s]' % (game, date_str)
-        cur = self._db.cursor()
-        cur.execute('INSERT INTO %(table)s (CustomId, Text) '
-                    'SELECT max(CustomId) + 1, ? FROM %(table)s' %
-                    {'table': self._table}, (text,))
-        cur.execute('SELECT CustomId FROM %s WHERE AutoId = ?' % self._table,
-                    (cur.lastrowid,))
-        row = cur.fetchone()
-        if not row:
-            logging.error('Failed to get last added quote')
-            self._conn.SendMessage(self._channel, 'Failed to add quote')
-            self._db.rollback()
+        idx = self._AddQuoteToDb(text)
+        if idx:
+            logging.info('quotes: User %r added quote #%s', msg.sender, idx)
+        return True
+
+    def _HandleRawAddQuote(self, msg, match):
+        """Handle "!quote rawadd ..." command."""
+        if not self._AuthorizeElevatedCommand(msg.sender):
             return True
 
-        self._conn.SendMessage(self._channel, 'Added quote #%s' % row[0])
-        self._db.commit()
-        logging.info('quotes: User %r added quote #%s', msg.sender, row[0])
+        text = match.group(1).strip()
+        idx = self._AddQuoteToDb(text)
+        if idx:
+            logging.info('quotes: User %r added quote #%s', msg.sender, idx)
         return True
 
     def _HandleDelQuote(self, msg, match):
