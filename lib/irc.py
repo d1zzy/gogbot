@@ -44,8 +44,8 @@ class Message:
         return True
 
     def __repr__(self):
-        return 'Message(prefix="%s", command="%s", command_args="%s")' % (
-                self.prefix, self.command, self.command_args)
+        return 'Message(prefix=%r, command=%r, command_args=%r, sender=%r)' % (
+                self.prefix, self.command, self.command_args, self.sender)
 
 
 class User:
@@ -94,13 +94,17 @@ class Connection:
     def GetUserList(self):
         return self._userlist
 
+    def SendRaw(self, text):
+        """Some some raw IRC line."""
+        self._conn.send(bytes('%s\r\n' % text, 'UTF-8'))
+
     def Connect(self, host, port, nickname, channel=None, server_pass=None):
         """Connect to an IRC server, authenticate and join a channel."""
         self._conn = socket.socket()
         self._conn.connect((host, port))
         logging.debug('Connected to %s:%s' % (host, port))
 
-        self._conn.send(bytes('CAP REQ :twitch.tv/membership\r\n', 'UTF-8'))
+        self.SendRaw('CAP REQ :twitch.tv/membership')
         if server_pass:
             self.SendPass(server_pass)
         self.SendNick(nickname)
@@ -109,23 +113,23 @@ class Connection:
         logging.debug('Joined %s' % channel)
 
     def SendPong(self, msg):
-        self._conn.send(bytes('PONG %s\r\n' % msg, 'UTF-8'))
+        self.SendRaw('PONG %s' % msg)
 
     def SendMessage(self, chan, msg):
-        self._conn.send(bytes('PRIVMSG %s :%s\r\n' % (chan, msg), 'UTF-8'))
+        self.SendRaw('PRIVMSG %s :%s' % (chan, msg))
 
     def SendNick(self, nick):
-        self._conn.send(bytes('NICK %s\r\n' % nick, 'UTF-8'))
+        self.SendRaw('NICK %s' % nick)
 
     def SendPass(self, password):
-        self._conn.send(bytes('PASS %s\r\n' % password, 'UTF-8'))
+        self.SendRaw('PASS %s' % password)
 
     def JoinChannel(self, chan):
-        self._conn.send(bytes('JOIN %s\r\n' % chan, 'UTF-8'))
+        self.SendRaw('JOIN %s' % chan)
         self.channel = chan
 
     def PartChannel(self, chan):
-        self._conn.send(bytes('PART %s\r\n' % chan, 'UTF-8'))
+        self.SendRaw('PART %s' % chan)
 
     def ReadNextMessage(self):
         """Reads the next IRC message."""
