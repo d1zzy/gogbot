@@ -94,6 +94,15 @@ class Connection:
     def GetUserList(self):
         return self._userlist
 
+    def UpdateUserList(self, userlist):
+        """Set the user list to contain ony the users listed in "userlist"."""
+        # Drop any usernames not listed.
+        new_list = {}
+        for user in userlist:
+            logging.info('[NAMES] User %r joined %r.', user, self.channel)
+            new_list[user] = self._userlist.get(user, User(user))
+        self._userlist = new_list
+
     def SendRaw(self, text):
         """Some some raw IRC line."""
         self._conn.send(bytes('%s\r\n' % text, 'UTF-8'))
@@ -251,6 +260,43 @@ class _ModeHandlerMixin:
         return True
 
 
+class _UserListHandlerMixin:
+    """Handles userlists that are received through multiple 353 messages."""
+
+    def __init__(self, conn):
+        super().__init__(conn)
+        # The temporary userlist being built while receiving a stream of
+        # type 353 messages.
+        self._tmp_list = None
+
+    def Handle353(self, msg):
+        # First 353 message, starts a new sequence.
+        if self._tmp_list is None:
+            self._tmp_list = []
+        parts = msg.command_args.split(':', maxsplit=1)
+        if len(parts) != 2 or not parts[0].endswith('%s ' % self._conn.channel):
+            logging.error('Invalid 353 type message format: %r', msg)
+            return False
+        # Everything after the first ':' should be a space delimited list of
+        # nicknames. We drop any @+ status from the listed usernames, twitch
+        # doesn't use this feature anyways.
+        self._tmp_list.extend(name.lstrip('@+')
+                              for name in parts[1].split(' ')
+                              if name)
+        return True
+
+    def Handle366(self, msg):
+        if self._tmp_list is None:
+            logging.error('Unexpected 366/RPL_ENDOFNAMES without a preceeding '
+                          '353/RPL_NAMREPLY')
+            return False
+        # End of user list, update the known channel userlist.
+        self._conn.UpdateUserList(self._tmp_list)
+        # Reset the list to prepare for the next sequence.
+        self._tmp_list = None
+        return True
+
+
 class _HandlerRoot:
     """Handler class hierarchy root.
 
@@ -275,6 +321,7 @@ class _HandlerRoot:
 class HandlerBase(_PingHandlerMixin,
                   _JoinPartHandlerMixin,
                   _ModeHandlerMixin,
+                  _UserListHandlerMixin,
                   _HandlerRoot):
     """Base IRC message handler class.
 
