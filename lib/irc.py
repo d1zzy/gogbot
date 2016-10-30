@@ -86,7 +86,7 @@ class Connection:
 
     def __init__(self):
         self._conn = None
-        self._input_buffers = ['']
+        self._input_file = None
         self.channel = None
         # List of users, indexed by username.
         self._userlist = {}
@@ -103,6 +103,9 @@ class Connection:
         self._conn = socket.socket()
         self._conn.connect((host, port))
         logging.debug('Connected to %s:%s' % (host, port))
+        self._input_file = self._conn.makefile(
+            mode='r', buffering=self._BUFFER_SIZE, encoding='UTF-8',
+            newline='\r\n')
 
         self.SendRaw('CAP REQ :twitch.tv/membership')
         if server_pass:
@@ -127,48 +130,32 @@ class Connection:
     def JoinChannel(self, chan):
         self.SendRaw('JOIN %s' % chan)
         self.channel = chan
+        # When joining a channel also send an empty MODE command, Twitch waits
+        # for this before sending the user list.
+        self.SendRaw('MODE %s' % chan)
 
     def PartChannel(self, chan):
         self.SendRaw('PART %s' % chan)
 
     def ReadNextMessage(self):
         """Reads the next IRC message."""
-        # Loop until we get a non-empty line (since these are supposed to be
-        # ignored by IRC clients).
-        line = ''
-        while not line:
-            # Loop until we get a full line.
-            while True:
-                lines = self._input_buffers[-1].split('\r\n', maxsplit=1)
-                # Got a line separator in the last buffer, yay!
-                if len(lines) >= 2:
-                    break
+        while True:
+            line = self._input_file.readline()
 
-                try:
-                    data = self._conn.recv(self._BUFFER_SIZE).decode('UTF-8')
-                except socket.error as err:
-                    logging.info('socket error: %s' % err)
-                    return None
-
-                except socket.timeout as err:
-                    logging.info('socket timeout: %s' % err)
-                    return None
-
-                if not data:
-                    return None
-                self._input_buffers.append(data)
-
-            # All previous buffers and the first line of the current buffer
-            # need to be handled as a single line.
-            line = ''.join(self._input_buffers[:-1]) + lines[0]
-            # Any remaining data is saved for later processing.
-            self._input_buffers = [lines[1]]
+            if not line:
+                logging.info('connection closed')
+                return None
 
             if len(line) > self._MAX_IRC_LINE:
                 logging.error('IRC line too long %d > %d' %
                               (len(line), self._MAX_IRC_LINE))
-                line = ''
+                continue
 
+            break
+
+        # Drop the \r\n at the end, if present.
+        if line[-2:] == '\r\n':
+            line = line[:-2]
         msg = Message()
         if not msg.Parse(line):
             return None
