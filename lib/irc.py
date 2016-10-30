@@ -177,34 +177,16 @@ class Client:
             self._handler.HandleMessage(msg)
 
 
-class HandlerBase:
-    """Base IRC message handler class.
-
-    Should be derived to change default behaviour and/or add handling for
-    commands not already handled. All handler methods are of the form
-    Handle<type> where <type> is an IRC message type, in capital letters. They
-    all receive the IRC message they are supposed to handle. A special
-    HandleDefault() is used to handle any messages types that have no specific
-    handler. Every Handle*() function should return True/False, True meaning
-    that the message has been successfully handled.
-    """
-    def __init__(self, conn):
-        self._conn = conn
-
-    def GetConnection(self):
-        return self._conn
-
-    def HandleMessage(self, msg):
-        handler = getattr(self, 'Handle%s' % msg.command.upper(),
-                          self.HandleDefault)
-        return handler(msg)
-
-    def HandleDefault(self, msg):
-        return False
+class _PingHandlerMixin:
+    """Handle PING messages."""
 
     def HandlePING(self, msg):
         self._conn.SendPong(msg.command_args)
         return True
+
+
+class _JoinPartHandlerMixin:
+    """Handle JOIN/PART messages."""
 
     def HandleJOIN(self, msg):
         if not msg.sender:
@@ -243,6 +225,10 @@ class HandlerBase:
         logging.info('[PART] User %r left %r.', msg.sender, self._conn.channel)
         return True
 
+
+class _ModeHandlerMixin:
+    """Handle the MODE message."""
+
     def HandleMODE(self, msg):
         parts = msg.command_args.split()
         if not msg.sender or msg.sender != 'jtv' or len(parts) != 3:
@@ -263,6 +249,44 @@ class HandlerBase:
         logging.info('[MODE] User %r updated %r to mode %r on %r.', msg.sender,
                      target, user.mode, self._conn.channel)
         return True
+
+
+class _HandlerRoot:
+    """Handler class hierarchy root.
+
+    Should be placed at the end of inheritance list. Provides common state
+    that all handlers can rely on.
+    """
+    def __init__(self, conn):
+        self._conn = conn
+
+    def GetConnection(self):
+        return self._conn
+
+    def HandleMessage(self, msg):
+        handler = getattr(self, 'Handle%s' % msg.command.upper(),
+                          self.HandleDefault)
+        return handler(msg)
+
+    def HandleDefault(self, msg):
+        return False
+
+
+class HandlerBase(_PingHandlerMixin,
+                  _JoinPartHandlerMixin,
+                  _ModeHandlerMixin,
+                  _HandlerRoot):
+    """Base IRC message handler class.
+
+    Should be derived to change default behaviour and/or add handling for
+    commands not already handled. All handler methods are of the form
+    Handle<type> where <type> is an IRC message type, in capital letters. They
+    all receive the IRC message they are supposed to handle. A special
+    HandleDefault() is used to handle any messages types that have no specific
+    handler. Every Handle*() function should return True/False, True meaning
+    that the message has been successfully handled.
+    """
+    pass
 
 
 def SplitPRIVMSG(msg):
