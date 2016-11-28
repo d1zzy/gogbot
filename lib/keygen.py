@@ -322,6 +322,16 @@ class KeyCode:
         self.vk = vk
         self.sc = sc
 
+class VirtualKey(KeyCode):
+    """KeyCode specialization for virtual keys."""
+    def __init__(self, code):
+        super().__init__(vk=code)
+
+class ScanCode(KeyCode):
+    """KeyCode specialization for scan codes."""
+    def __init__(self, code):
+        super().__init__(sc=code)
+
 def PressKey(key_code):
     """Simulate pressing a key.
 
