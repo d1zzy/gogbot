@@ -1,52 +1,44 @@
+import bisect
 import logging
 import re
 import time
 
+from lib import event_queue
 from lib import irc
 
-class _Message:
+class _Message(event_queue.Event):
     def __init__(self, sender, text):
+        super().__init__(text)
         self.sender = sender
-        self.text = text
-        self.timestamp = time.time()
 
     def __repr__(self):
-        return '_Message(sender=%r,text=%r,timestamp=%r)' % (
-            self.sender, self.text, self.timestamp)
+        return '_Message(sender=%r,data=%r,timestamp=%r)' % (
+            self.sender, self.data, self.timestamp)
 
-class _MessagePool:
+
+class _MessagePool(event_queue.Queue):
     """Pool containing all events issued in the past "max_age" seconds."""
     def __init__(self, max_age):
-        self._max_age = max_age
-        self._messages = []
+        super().__init__(max_age)
         self._idx_sender = {}
-        self._idx_text = {}
 
-    def _RemoveExpiredMessages(self):
-        now = time.time()
-        to_remove = []
-        for msg in self._messages:
-            if msg.timestamp + self._max_age >= now:
-                break
-            to_remove.append(msg)
-
-        for msg in to_remove:
-            self._messages.pop(0)
-            self._idx_sender[msg.sender].pop(0)
-            self._idx_text[msg.text].pop(0)
+    def RemoveEvent(self, msg):
+        super().RemoveEvent(msg)
+        for idx, candidate in enumerate(self._idx_sender.get(msg.sender, [])):
+            self._idx_sender[msg.sender].pop(idx)
+            break
 
     def CountBySender(self, sender):
-        self._RemoveExpiredMessages()
-        return len(self._idx_sender.setdefault(sender, []))
+        self._RemoveExpiredEvents()
+        return len(self._idx_sender.get(sender, []))
 
     def CountByText(self, text):
-        self._RemoveExpiredMessages()
-        return len(self._idx_text.setdefault(text, []))
+        return super().CountByData(text)
 
     def RecordMessage(self, msg):
-        self._messages.append(msg)
-        self._idx_sender.setdefault(msg.sender, []).append(msg)
-        self._idx_text.setdefault(msg.text, []).append(msg)
+        super().RecordEvent(msg)
+        bisect.insort_right(self._idx_sender.setdefault(msg.sender, []), msg)
+
 
 class Handler(irc.HandlerBase):
     """IRC handler that limits the rate of incoming PRIVMSGs."""
@@ -73,7 +65,7 @@ class Handler(irc.HandlerBase):
 
         msg = _Message(msg.sender, parts[1])
         # If a filter is defined then any message not matching is ignored.
-        if self._text_filter and not self._text_filter.match(msg.text):
+        if self._text_filter and not self._text_filter.match(msg.data):
             return False
 
         if (self._sender_rate and
@@ -81,7 +73,7 @@ class Handler(irc.HandlerBase):
             self._Log('REJECT:sender-over-limit:%s', msg)
             return True
         if (self._text_rate and
-            self._pool.CountByText(msg.text) >= self._text_rate):
+            self._pool.CountByText(msg.data) >= self._text_rate):
             self._Log('REJECT:text-over-limit:%s', msg)
             return True
 
