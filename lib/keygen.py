@@ -374,7 +374,7 @@ def SendKeys(keys, hold_time=1, wait_time=1):
         wait_time: how long to wait between key presses, in seconds.
     """
     for key in keys:
-        SendKey(key, hold_time=1)
+        SendKey(key, hold_time=hold_time)
         time.sleep(wait_time)
 
 def SendKeyCombo(keys, hold_time=1):
