@@ -21,7 +21,7 @@ Copy `config.ini` to `config_private.ini` then edit `config_private.ini` with a
 text editor, change the following:
 * `nickname`, `channel` and `password` (password is *OAUTH* string that you get
  from http://www.twitchapps.com/tmi/)
-* `plugins` inside the `[CHAIN]` section to list `twitch_plays_sv`
+* `plugins` inside the `[CHAIN]` section to list `tp_grim_fandango`
 * edit the `[TWITCH_PLAYS]` configuration section as needed
 * if using `ratelimiter` plugin, edit the `[RATELIMITER]` configuration section
 to match what you want
@@ -49,7 +49,7 @@ password = oauth:...
 handler = chain
 
 [CHAIN]
-plugins = ratelimiter twitch_plays_gf
+plugins = ratelimiter tp_grim_fandango
 
 [RATELIMITER]
 debug = true
