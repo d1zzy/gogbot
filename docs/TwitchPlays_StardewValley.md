@@ -2,7 +2,7 @@
 
 ## Installation
 
-First, install the Python for Wwindows version 3.5.x. Either 64 or 32 bit
+First, install the Python for Windows version 3.5.x. Either 64 or 32 bit
 version should work:
 https://www.python.org/downloads/
 

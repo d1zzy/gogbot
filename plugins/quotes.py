@@ -18,6 +18,7 @@ class Handler(irc.HandlerBase):
     _RAWADD_QUOTE_RE = re.compile(r'^!quote +rawadd +([^ ].*)$',
                                   flags=re.IGNORECASE)
     _DEL_QUOTE_RE = re.compile(r'^!quote +del +#?(\d+)$', flags=re.IGNORECASE)
+    _HELP_RE = re.compile(r'^!quote +help$', flags=re.IGNORECASE)
 
     def __init__(self, conn, conf):
         super().__init__(conn)
@@ -55,6 +56,10 @@ class Handler(irc.HandlerBase):
         match = self._DEL_QUOTE_RE.match(command)
         if match:
             return self._HandleDelQuote(msg, match)
+
+        match = self._HELP_RE.match(command)
+        if match:
+            return self._HandleHelp()
 
         return False
 
@@ -182,4 +187,10 @@ class Handler(irc.HandlerBase):
         self._conn.SendMessage(self._channel, 'Deleted quote #%s' % index)
         self._db.commit()
         logging.info('quotes: User %r removed quote #%s', msg.sender, index)
+        return True
+
+    def _HandleHelp(self):
+        """Handle "!quote help"."""
+        self._conn.SendMessage(
+            self._channel, 'Quotes plugin documentation: https://goo.gl/h7028Q')
         return True
