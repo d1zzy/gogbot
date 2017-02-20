@@ -29,6 +29,20 @@ class Handler(irc.HandlerBase):
             raise Exception('"db_file" not found in QUOTE config section')
         self._db = sqlite3.connect(quote_section['db_file'])
         self._table = quote_section['db_table']
+        self._report_errors = quote_section.getboolean('report_errors')
+        self._use_whisper = quote_section.getboolean('use_whisper')
+
+    def _ReportError(self, recipient, fmt, *args, level=logging.WARNING):
+        if level is not None:
+            logging.log(level, fmt, *args)
+        if self._report_errors:
+            if self._use_whisper:
+                self._conn.SendWhisper(recipient, fmt % args)
+            else:
+                # Send a nicely formatted chat (public) message with the
+                # user as a prefix.
+                self._conn.SendMessage(self._channel,
+                                       ''.join((recipient, ': ', fmt % args)))
 
     def HandlePRIVMSG(self, msg):
         """The entry point into this plugin, handle a chat message."""
@@ -43,7 +57,7 @@ class Handler(irc.HandlerBase):
 
         match = self._GET_QUOTE_RE.match(command)
         if match:
-            return self._HandleGetQuote(match)
+            return self._HandleGetQuote(msg, match)
 
         match = self._ADD_QUOTE_RE.match(command)
         if match:
@@ -63,7 +77,7 @@ class Handler(irc.HandlerBase):
 
         return False
 
-    def _HandleGetQuote(self, match):
+    def _HandleGetQuote(self, msg, match):
         """Handle "!quote" and "!quote <number>" commands."""
         index = match.group(1)
         cur = self._db.cursor()
@@ -76,7 +90,7 @@ class Handler(irc.HandlerBase):
                 self._table)
         row = cur.fetchone()
         if not row:
-            logging.warning('Failed to get quote')
+            self._ReportError(msg.sender, 'Failed to get quote #%s', index)
             return False
 
         self._conn.SendMessage(self._channel, '#%s: %s' % (row[0], row[1]))
@@ -90,17 +104,17 @@ class Handler(irc.HandlerBase):
         # we don't have much of a choice and just ignore them.
         user = self._conn.GetUserList().get(sender)
         if not user:
-            logging.info("User %r tried elevated quotes command but we don't "
-                         "know about them from Twitch yet, ignoring it.",
-                         sender)
+            self._ReportError(sender, "User %r tried elevated quotes command "
+                              "but we don't know about them from Twitch yet, "
+                              "ignoring it.", sender, level=logging.INFO)
             return False
         if not user.IsModerator():
-            logging.warning('Unprivileged user %r tried to issue elevated '
-                            'quotes command', sender)
+            self._ReportError(sender, 'Unprivileged user %r tried to issue '
+                              'elevated quotes command', sender)
             return False
         return True
 
-    def _GetCurrentGame(self):
+    def _GetCurrentGame(self, sender):
         """Get the current game set on a channel using Twitch API.
 
             TODO(dizzy): if other code starts using Twitch API, make an internal
@@ -120,12 +134,13 @@ class Handler(irc.HandlerBase):
                        'Gecko/20100101 Firefox/6.0'}
         req = requests.get(url, headers=headers)
         if req.status_code != 200:
-            logging.error('Twitch API game name request failed: %s %s',
-                        req.status_code, req.reason)
+            self._ReportError(
+                    sender, 'Twitch API game name request failed: %s %s',
+                    req.status_code, req.reason, level=logging.ERROR)
             return None
         game = req.json()
         if not game or 'game' not in game:
-            logging.warning('Game name not set?')
+            self._ReportError(sender, 'Got empty game name')
             return None
         return game['game']
 
@@ -156,13 +171,13 @@ class Handler(irc.HandlerBase):
 
         text = match.group(1).strip()
         date_str = time.strftime('%d.%m.%Y', time.gmtime())
-        game = self._GetCurrentGame()
+        game = self._GetCurrentGame(msg.sender)
         if not game:
             return True
         text += ' [%s] [%s]' % (game, date_str)
         idx = self._AddQuoteToDb(text)
         if idx:
-            logging.info('quotes: User %r added quote #%s', msg.sender, idx)
+            logging.info('User %r added quote #%s', msg.sender, idx)
         return True
 
     def _HandleRawAddQuote(self, msg, match):
@@ -173,7 +188,7 @@ class Handler(irc.HandlerBase):
         text = match.group(1).strip()
         idx = self._AddQuoteToDb(text)
         if idx:
-            logging.info('quotes: User %r added quote #%s', msg.sender, idx)
+            logging.info('User %r added quote #%s', msg.sender, idx)
         return True
 
     def _HandleDelQuote(self, msg, match):
@@ -184,9 +199,12 @@ class Handler(irc.HandlerBase):
         index = match.group(1)
         cur = self._db.cursor()
         cur.execute('DELETE FROM %s WHERE CustomId = ?' % self._table, (index,))
-        self._conn.SendMessage(self._channel, 'Deleted quote #%s' % index)
+        if cur.rowcount != 1:
+            self._ReportError(msg.sender, "Failed to remove quote #%s", index)
+            return True
         self._db.commit()
-        logging.info('quotes: User %r removed quote #%s', msg.sender, index)
+        self._conn.SendMessage(self._channel, 'Deleted quote #%s' % index)
+        logging.info('User %r removed quote #%s', msg.sender, index)
         return True
 
     def _HandleHelp(self):

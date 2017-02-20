@@ -29,6 +29,8 @@ class Message:
         if len(parts) >= 2 and parts[0][0] == ':':
             prefix = parts[0][1:]
             parts = parts[1].split(' ', maxsplit=1)
+            if len(parts) < 2:
+                parts.append('')
 
         if len(parts) < 2:
             logging.error('invalid IRC message "%s"' % raw_msg)
@@ -117,6 +119,7 @@ class Connection:
             newline='\r\n')
 
         self.SendRaw('CAP REQ :twitch.tv/membership')
+        self.SendRaw('CAP REQ :twitch.tv/commands')
         if server_pass:
             self.SendPass(server_pass)
         self.SendNick(nickname)
@@ -129,6 +132,10 @@ class Connection:
 
     def SendMessage(self, chan, msg):
         self.SendRaw('PRIVMSG %s :%s' % (chan, msg))
+
+    def SendWhisper(self, recipient, msg):
+        self.SendRaw('PRIVMSG #jtv :/w %s %s' % (recipient, msg))
+        #self.SendRaw('WHISPER %s :%s' % (recipient, msg))
 
     def SendNick(self, nick):
         self.SendRaw('NICK %s' % nick)
