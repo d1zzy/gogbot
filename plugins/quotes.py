@@ -17,6 +17,8 @@ class Handler(irc.HandlerBase):
     _ADD_QUOTE_RE = re.compile(r'^!quote +add +([^ ].*)$', flags=re.IGNORECASE)
     _RAWADD_QUOTE_RE = re.compile(r'^!quote +rawadd +([^ ].*)$',
                                   flags=re.IGNORECASE)
+    _UPDATE_QUOTE_RE = re.compile(r'^!quote +update +#?(\d+) +([^ ].*)$',
+                                  flags=re.IGNORECASE)
     _DEL_QUOTE_RE = re.compile(r'^!quote +del +#?(\d+)$', flags=re.IGNORECASE)
     _HELP_RE = re.compile(r'^!quote +help$', flags=re.IGNORECASE)
 
@@ -66,6 +68,10 @@ class Handler(irc.HandlerBase):
         match = self._RAWADD_QUOTE_RE.match(command)
         if match:
             return self._HandleRawAddQuote(msg, match)
+
+        match = self._UPDATE_QUOTE_RE.match(command)
+        if match:
+            return self._HandleUpdateQuote(msg, match)
 
         match = self._DEL_QUOTE_RE.match(command)
         if match:
@@ -189,6 +195,25 @@ class Handler(irc.HandlerBase):
         idx = self._AddQuoteToDb(text)
         if idx:
             logging.info('User %r added quote #%s', msg.sender, idx)
+        return True
+
+    def _HandleUpdateQuote(self, msg, match):
+        """Handle "!quote update ..." command."""
+        if not self._AuthorizeElevatedCommand(msg.sender):
+            return True
+
+        index = match.group(1)
+        text = match.group(2).strip()
+        cur = self._db.cursor()
+        cur.execute('UPDATE %s SET Text = ? WHERE CustomId = ?' %
+                    self._table, (text, index,))
+        if cur.rowcount != 1:
+            self._ReportError(msg.sender, "Failed to update quote #%s", index)
+            return True
+        self._db.commit()
+        self._conn.SendMessage(self._channel, 'Updated quote #%s' % index)
+        logging.info('User %s updated quote #%s to: %s',
+                     msg.sender, index, text)
         return True
 
     def _HandleDelQuote(self, msg, match):

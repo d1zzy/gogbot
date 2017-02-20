@@ -42,6 +42,15 @@ Adds a new quote to the database as given. This adds the text following
 date within brackets so that the new quote will look like an existing quote
 added by `!quote add`.
 
+### `!quote update #<number> "<text>" -- <streamer> [<game>] [<date>]`
+This is a privileged command, requires moderator permissions.
+
+This updates the text of the existing quote identified by `<number>`. The new
+text is set exactly to what is given to the command (similar to the
+`!quote rawadd` command) so you'd generally want to add the game name and date
+within brackets so that the updated quote will look like an existing quote
+added by `!quote add`.
+
 ### `!quote del #<number>`
 This is a privileged command, requires moderator permissions.
 
