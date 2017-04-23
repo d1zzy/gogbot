@@ -10,6 +10,9 @@ additional IRC command support and/or changing the behavior of commands
 already handled (ex. changing `PRIVMSG` behavior to support !bot commands)
 * support for configured runtime plugins (module) loading
 * various (game specific) TwitchPlays modules
+* *quote* saving and query, with automated current streamed game and date
+tagging
+* *trivia* game plugin
 
 ## Installation
 

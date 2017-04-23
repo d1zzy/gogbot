@@ -1,0 +1,17 @@
+# Trivial file syntax:
+# * any line contents starting with # are ignored
+# * questions are grouped into blocks that start with a "Q:" line (the question) followed
+#   by one or more lines starting with "A:" (incorrect answers) and one and only one line
+#   starting with "CA:" (the correct answer)
+
+Q:What game category does DOOM games fall into?
+A:RPG
+A:RTS
+CA:FPS
+A:Action/Adventure
+
+Q:Which classic game introduced the famouse phrase "War, war never changes"?
+A:Baldur's Gate
+A:Command&Conquer
+A:Warcraft 2
+CA:Fallout
