@@ -35,12 +35,8 @@ def main(args):
                 conn_config['nickname'], conn_config['channel'],
                 conn_config['password'])
 
-    if 'GENERAL' not in config.sections():
-        logging.error('GENERAL section missing in config')
-        return False
-    plugin = plugin_loader.GetPlugin(config['GENERAL']['handler'])
-
-    client = irc.Client(plugin.Handler(con, config))
+    chain_plugin = plugin_loader.GetPlugin('chain')
+    client = irc.Client(chain_plugin.Handler(con, config))
     try:
         client.Run()
     except KeyboardInterrupt:

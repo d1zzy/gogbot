@@ -46,9 +46,6 @@ nickname = gogbot
 password = oauth:...
 
 [GENERAL]
-handler = chain
-
-[CHAIN]
 plugins = ratelimiter tp_grim_fandango
 
 [RATELIMITER]

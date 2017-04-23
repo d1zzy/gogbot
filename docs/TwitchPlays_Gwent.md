@@ -47,9 +47,6 @@ nickname = gogbot
 password = oauth:...
 
 [GENERAL]
-handler = chain
-
-[CHAIN]
 plugins = ratelimiter twitch_plays_gwent
 
 [RATELIMITER]

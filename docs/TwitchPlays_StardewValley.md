@@ -42,9 +42,6 @@ nickname = gogbot
 password = oauth:...
 
 [GENERAL]
-handler = chain
-
-[CHAIN]
 plugins = ratelimiter tp_stardew_valley
 
 [RATELIMITER]
