@@ -32,8 +32,10 @@ def main(args):
     conn_config = config['CONNECTION']
     con = irc.Connection()
     con.Connect(conn_config['host'], int(conn_config['port']),
-                conn_config['nickname'], conn_config['channel'],
-                conn_config['password'])
+                conn_config['nickname'],
+                channel=conn_config.get('channel', None),
+                server_pass=conn_config.get('password', None),
+                activity_timer=int(conn_config.get('activity_timer', 600)))
 
     chain_plugin = plugin_loader.GetPlugin('chain')
     client = irc.Client(chain_plugin.Handler(con, config))

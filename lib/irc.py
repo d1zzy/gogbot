@@ -91,6 +91,8 @@ class Connection:
 
     def __init__(self):
         self._conn = None
+        self._activity_timer = None
+        self._conn_timeout = None
         self._selector = None
         self._input_buffer = ''
         self.channel = None
@@ -113,11 +115,14 @@ class Connection:
         """Some some raw IRC line."""
         self._conn.send(bytes('%s\r\n' % text, 'UTF-8'))
 
-    def Connect(self, host, port, nickname, channel=None, server_pass=None):
+    def Connect(self, host, port, nickname, channel=None, server_pass=None,
+                activity_timer=600):
         """Connect to an IRC server, authenticate and join a channel."""
         self._conn = socket.socket()
         self._conn.connect((host, port))
         self._conn.setblocking(False)
+        self._activity_timer = activity_timer
+        self._conn_timeout = time.time() + self._activity_timer
         logging.debug('Connected to %s:%s' % (host, port))
         # Initialize selector used to wait for read data.
         self._selector = selectors.DefaultSelector()
@@ -158,6 +163,12 @@ class Connection:
     def PartChannel(self, chan):
         self.SendRaw('PART %s' % chan)
 
+    def _CloseConnectionInput():
+        """Closes the input part of the connection."""
+        self._selector.unregister(self._conn)
+        self._selector = None
+        socket.shutdown(socket.SHUT_RD)
+
     def _ReadMoreData(self, timeout):
         # Wait for data to be available.
         for key, mask in self._selector.select(timeout=timeout):
@@ -169,20 +180,27 @@ class Connection:
                     data = key.fileobj.recv(self._BUFFER_SIZE)
                     if not data:
                         # Socket closed.
-                        self._selector.unregister(self._conn)
-                        self._selector = None
+                        self._CloseConnectionInput()
                         return False
                     self._input_buffer += data.decode(encoding='utf-8')
+                    # We got some bytes, reset the activity timer.
+                    self._conn_timeout = time.time() + self._activity_timer
             except socket.error as err:
                 ec = err.args[0]
                 if ec == errno.EAGAIN or ec == errno.EWOULDBLOCK:
                     break
                 if ec == errno.ECONNRESET:
                     # Connection forcibly closed.
-                    self._selector.unregister(self._conn)
-                    self._selector = None
+                    self._CloseConnectionInput()
                     return False
                 raise
+
+        # Connection activity timeout reached.
+        if time.time() >= self._conn_timeout:
+            # Close connection.
+            self._CloseConnectionInput()
+            return False
+
         return True
 
     def ReadNextMessage(self, timeout):
