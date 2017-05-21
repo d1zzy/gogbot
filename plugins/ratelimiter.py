@@ -3,6 +3,7 @@ import logging
 import re
 import time
 
+from lib import config as config_lib
 from lib import event_queue
 from lib import irc
 
@@ -45,7 +46,7 @@ class Handler(irc.HandlerBase):
 
     def __init__(self, conn, config):
         super().__init__(conn)
-        self._cfg = config['RATELIMITER'] if 'RATELIMITER' in config.sections() else {}
+        self._cfg = config_lib.GetSection(config, 'RATELIMITER')
         self._pool = _MessagePool(self._cfg.getint('max_age'))
         self._sender_rate = self._cfg.getint('rate_per_sender') or None
         self._text_rate = self._cfg.getint('rate_per_text') or None
