@@ -26,6 +26,13 @@ class Handler(irc.HandlerBase):
             result.append(plugin_loader.GetPlugin(name).Handler(conn, conf))
         return result
 
+    def HandleTick(self):
+        # Distribute the tick event to the chained plugins.
+        for handler in self._handlers:
+            if handler.HandleTick():
+                return True
+        return False
+
     def HandleDefault(self, msg):
         # Distribute the message to the chained plugins.
         for handler in self._handlers:

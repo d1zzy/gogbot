@@ -1,5 +1,8 @@
+import errno
 import logging
+import selectors
 import socket
+import time
 
 class Message:
     """Encapsulates the various IRC message fields, per the spec.
@@ -88,7 +91,8 @@ class Connection:
 
     def __init__(self):
         self._conn = None
-        self._input_file = None
+        self._selector = None
+        self._input_buffer = ''
         self.channel = None
         # List of users, indexed by username.
         self._userlist = {}
@@ -113,10 +117,11 @@ class Connection:
         """Connect to an IRC server, authenticate and join a channel."""
         self._conn = socket.socket()
         self._conn.connect((host, port))
+        self._conn.setblocking(False)
         logging.debug('Connected to %s:%s' % (host, port))
-        self._input_file = self._conn.makefile(
-            mode='r', buffering=self._BUFFER_SIZE, encoding='UTF-8',
-            newline='\r\n')
+        # Initialize selector used to wait for read data.
+        self._selector = selectors.DefaultSelector()
+        self._selector.register(self._conn, selectors.EVENT_READ)
 
         self.SendRaw('CAP REQ :twitch.tv/membership')
         self.SendRaw('CAP REQ :twitch.tv/commands')
@@ -153,15 +158,54 @@ class Connection:
     def PartChannel(self, chan):
         self.SendRaw('PART %s' % chan)
 
-    def ReadNextMessage(self):
+    def _ReadMoreData(self, timeout):
+        # Wait for data to be available.
+        for key, mask in self._selector.select(timeout=timeout):
+            # There's only one file descriptor registered, no need to check
+            # which file descriptor received the event.
+            try:
+                # Exhaust all input data.
+                while True:
+                    data = key.fileobj.recv(self._BUFFER_SIZE)
+                    if not data:
+                        # Socket closed.
+                        self._selector.unregister(self._conn)
+                        self._selector = None
+                        return False
+                    self._input_buffer += data.decode(encoding='utf-8')
+            except socket.error as err:
+                ec = err.args[0]
+                if ec == errno.EAGAIN or ec == errno.EWOULDBLOCK:
+                    break
+                if ec == errno.ECONNRESET:
+                    # Connection forcibly closed.
+                    self._selector.unregister(self._conn)
+                    self._selector = None
+                    return False
+                raise
+        return True
+
+    def ReadNextMessage(self, timeout):
         """Reads the next IRC message."""
+        now = time.time()
+        end_time = now + timeout
         while True:
-            line = self._input_file.readline()
+            # Timeout exit condition.
+            now = time.time()
+            if now >= end_time:
+                raise TimeoutError('timeout waiting for new message')
 
-            if not line:
-                logging.info('connection closed')
-                return None
+            if '\r\n' not in self._input_buffer:
+                if not self._selector:
+                    logging.info('connection closed')
+                    return None
+                self._ReadMoreData(end_time - now)
 
+            parts = self._input_buffer.split('\r\n', maxsplit=1)
+            if len(parts) < 2:
+                continue
+
+            line, self._input_buffer = parts
             if len(line) > self._MAX_IRC_LINE:
                 logging.error('IRC line too long %d > %d' %
                               (len(line), self._MAX_IRC_LINE))
@@ -169,9 +213,6 @@ class Connection:
 
             break
 
-        # Drop the \r\n at the end, if present.
-        if line[-2:] == '\r\n':
-            line = line[:-2]
         msg = Message()
         if not msg.Parse(line):
             return None
@@ -180,13 +221,26 @@ class Connection:
 
 
 class Client:
+    _TICK_INTERVAL = 1  # Call HandleTick() every 1 second.
+
     def __init__(self, handler):
         self._handler = handler
 
     def Run(self):
         """Runs the IRC client, reads any network packets then answers them."""
+        next_tick = time.time() + self._TICK_INTERVAL
         while True:
-            msg = self._handler.GetConnection().ReadNextMessage()
+            now = time.time()
+            if now >= next_tick:
+                self._handler.HandleTick()
+                next_tick += self._TICK_INTERVAL
+                continue
+
+            try:
+                msg = self._handler.GetConnection().ReadNextMessage(
+                        next_tick - now)
+            except TimeoutError:
+                continue
             if not msg:
                 break
 
@@ -315,6 +369,10 @@ class _HandlerRoot:
 
     def GetConnection(self):
         return self._conn
+
+    def HandleTick(self):
+        """Handle the time tick."""
+        return False
 
     def HandleMessage(self, msg):
         handler = getattr(self, 'Handle%s' % msg.command.upper(),
