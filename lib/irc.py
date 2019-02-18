@@ -14,6 +14,8 @@ class Message:
     - command parameters
     """
     def __init__(self, raw_msg=None):
+        # Store list of tags, if any.
+        self.tags = {}
         # Store the prefix with no leading ':'. Can be None if no prefix was
         # present.
         self.prefix = None
@@ -28,7 +30,13 @@ class Message:
 
     def Parse(self, raw_msg):
         parts = raw_msg.split(' ', maxsplit=1)
+        tags = None
         prefix = None
+        if len(parts) >= 2 and parts[0][0] == '@':
+            # Extract the tags.
+            tags = parts[0][1:]
+            parts = parts[1].split(' ', maxsplit=1)
+
         if len(parts) >= 2 and parts[0][0] == ':':
             prefix = parts[0][1:]
             parts = parts[1].split(' ', maxsplit=1)
@@ -38,6 +46,13 @@ class Message:
         if len(parts) < 2:
             logging.error('Invalid IRC message "%s"' % raw_msg)
             return False
+
+        if tags:
+            # Tags are semicolon separated name=value pairs.
+            for tag in tags.split(';'):
+                tag_parts = tag.split('=', maxsplit=1)
+                self.tags[tag_parts[0]] = (
+                    tag_parts[1] if len(tag_parts) >= 2 else '')
 
         if prefix:
             sender = prefix.split('!', maxsplit=1)[0].strip()
@@ -59,6 +74,7 @@ class User:
     def __init__(self, username):
         self.name = username
         self.mode = ''
+        self.tags = {}
 
     def UpdateMode(self, mode_str):
         # We're fairly limited in what user MODE updates we can process.
@@ -79,8 +95,15 @@ class User:
                 return
             self.mode = [c for c in self.mode if c != mode]
 
+    def UpdateTags(self, tags):
+        self.tags.update(tags)
+
     def IsModerator(self):
-        return 'o' in self.mode
+        return ('o' in self.mode or self.tags.get('mod', 0) == 1 or
+                # See https://dev.twitch.tv/docs/irc/tags/#userstate-twitch-tags
+                any(badge.split('/', maxsplit=1)[0] in ('broadcaster',
+                                                        'moderator', 'admin')
+                    for badge in self.tags.get('badges', '').split(',')))
 
 
 class Connection:
@@ -131,8 +154,10 @@ class Connection:
         self._selector = selectors.DefaultSelector()
         self._selector.register(self._conn, selectors.EVENT_READ)
 
-        self.SendRaw('CAP REQ :twitch.tv/membership')
+        # Ask for the Twitch commands/membership/tags capabilities.
         self.SendRaw('CAP REQ :twitch.tv/commands')
+        self.SendRaw('CAP REQ :twitch.tv/membership')
+        self.SendRaw('CAP REQ :twitch.tv/tags')
         if server_pass:
             self.SendPass(server_pass)
         self.SendNick(nickname)
@@ -385,6 +410,29 @@ class _UserListHandlerMixin:
         return True
 
 
+class _UserTagsHandlerMixin:
+    """Handle usertags in messages."""
+
+    def HandlePRIVMSG(self, msg):
+        if not msg.sender:
+            # Strange, no sender.
+            return False
+
+        if not msg.tags:
+            # Nothing to do.
+            return False
+
+        userlist = self._conn.GetUserList()
+        if msg.sender not in userlist:
+            logging.warning('[PRIVMSG] User %r not part of channel %r',
+                            msg.sender, self._conn.channel)
+            userlist[msg.sender] = User(msg.sender)
+        userlist[msg.sender].UpdateTags(msg.tags)
+
+        # Let other handlers fully handle PRIVMSG.
+        return False
+
+
 class HandlerBase:
     """Base IRC message handler class.
 
@@ -419,6 +467,7 @@ class CoreHandler(_PingHandlerMixin,
                   _JoinPartHandlerMixin,
                   _ModeHandlerMixin,
                   _UserListHandlerMixin,
+                  _UserTagsHandlerMixin,
                   HandlerBase):
     """Handles core functions, always invoked."""
     pass
