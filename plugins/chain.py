@@ -9,12 +9,15 @@ class Handler(irc.HandlerBase):
 
     def __init__(self, conn, conf):
         super().__init__(conn)
+        self._handlers = [irc.CoreHandler(conn)]
+
         section = config.GetSection(conf, 'GENERAL')
         if 'plugins' not in section:
             raise Exception('"plugins" setting not found')
-        self._handlers = self._LoadPlugins(section['plugins'], conn, conf)
-        if not self._handlers:
+        handlers = self._LoadPlugins(section['plugins'], conn, conf)
+        if not handlers:
             raise Exception('empty list of plugins to load')
+        self._handlers.extend(handlers)
 
     @staticmethod
     def _LoadPlugins(plugins, conn, conf):

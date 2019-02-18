@@ -385,11 +385,16 @@ class _UserListHandlerMixin:
         return True
 
 
-class _HandlerRoot:
-    """Handler class hierarchy root.
+class HandlerBase:
+    """Base IRC message handler class.
 
-    Should be placed at the end of inheritance list. Provides common state
-    that all handlers can rely on.
+    Should be derived to change default behaviour and/or add handling for
+    commands not already handled. All handler methods are of the form
+    Handle<type> where <type> is an IRC message type, in capital letters. They
+    all receive the IRC message they are supposed to handle. A special
+    HandleDefault() is used to handle any messages types that have no specific
+    handler. Every Handle*() function should return True/False, True meaning
+    that the message has been successfully handled.
     """
     def __init__(self, conn):
         self._conn = conn
@@ -410,21 +415,12 @@ class _HandlerRoot:
         return False
 
 
-class HandlerBase(_PingHandlerMixin,
+class CoreHandler(_PingHandlerMixin,
                   _JoinPartHandlerMixin,
                   _ModeHandlerMixin,
                   _UserListHandlerMixin,
-                  _HandlerRoot):
-    """Base IRC message handler class.
-
-    Should be derived to change default behaviour and/or add handling for
-    commands not already handled. All handler methods are of the form
-    Handle<type> where <type> is an IRC message type, in capital letters. They
-    all receive the IRC message they are supposed to handle. A special
-    HandleDefault() is used to handle any messages types that have no specific
-    handler. Every Handle*() function should return True/False, True meaning
-    that the message has been successfully handled.
-    """
+                  HandlerBase):
+    """Handles core functions, always invoked."""
     pass
 
 
