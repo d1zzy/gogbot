@@ -30,7 +30,7 @@ def main(args):
         logging.error('CONNECTION section missing in config')
         return False
     conn_config = config['CONNECTION']
-    con = irc.Connection()
+    con = irc.Connection(conn_config.getboolean('log_traffic', False))
     con.Connect(conn_config['host'], int(conn_config['port']),
                 conn_config['nickname'],
                 channel=conn_config.get('channel', None),

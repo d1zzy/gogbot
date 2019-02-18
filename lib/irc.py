@@ -36,7 +36,7 @@ class Message:
                 parts.append('')
 
         if len(parts) < 2:
-            logging.error('invalid IRC message "%s"' % raw_msg)
+            logging.error('Invalid IRC message "%s"' % raw_msg)
             return False
 
         if prefix:
@@ -89,7 +89,8 @@ class Connection:
     _BUFFER_SIZE = 1048576  # 1Mb.
     _MAX_IRC_LINE = 510  # 512 including \r\n.
 
-    def __init__(self):
+    def __init__(self, log_traffic=False):
+        self._log_traffic = log_traffic
         self._conn = None
         self._activity_timer = None
         self._conn_timeout = None
@@ -113,6 +114,8 @@ class Connection:
 
     def SendRaw(self, text):
         """Some some raw IRC line."""
+        if self._log_traffic:
+            logging.debug('< %r', text)
         self._conn.send(bytes('%s\r\n' % text, 'UTF-8'))
 
     def Connect(self, host, port, nickname, channel=None, server_pass=None,
@@ -198,13 +201,14 @@ class Connection:
         # Connection activity timeout reached.
         if time.time() >= self._conn_timeout:
             # Close connection.
+            logging.error('Connection timed out, closing.')
             self._CloseConnectionInput()
             return False
 
         return True
 
-    def ReadNextMessage(self, timeout):
-        """Reads the next IRC message."""
+    def ReadNextLine(self, timeout):
+        """Reads the next IRC line."""
         now = time.time()
         end_time = now + timeout
         while True:
@@ -231,11 +235,9 @@ class Connection:
 
             break
 
-        msg = Message()
-        if not msg.Parse(line):
-            return None
-
-        return msg
+        if self._log_traffic:
+            logging.debug('> %r' % line)
+        return line
 
 
 class Client:
@@ -255,12 +257,19 @@ class Client:
                 continue
 
             try:
-                msg = self._handler.GetConnection().ReadNextMessage(
+                line = self._handler.GetConnection().ReadNextLine(
                         next_tick - now)
             except TimeoutError:
                 continue
-            if not msg:
+
+            if line is None:
+                # Connection closed.
                 break
+
+            msg = Message()
+            if not msg.Parse(line):
+                # Invalid formatted message, skip.
+                continue
 
             self._handler.HandleMessage(msg)
 
