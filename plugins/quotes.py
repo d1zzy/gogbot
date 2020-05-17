@@ -1,11 +1,10 @@
 import logging
 import re
-import requests
 import sqlite3
 import time
-from urllib import parse as url_parse
 
 from lib import config
+from lib import helix
 from lib import irc
 
 
@@ -24,7 +23,7 @@ class Handler(irc.HandlerBase):
 
     def __init__(self, conn, conf):
         super().__init__(conn)
-        self._client_id = conf['CONNECTION']['client_id'].lower()
+        self._helix = helix.Helix(conf)
         self._channel = conf['CONNECTION']['channel'].lower()
         quote_section = config.GetSection(conf, 'quotes')
         if 'db_file' not in quote_section:
@@ -120,38 +119,17 @@ class Handler(irc.HandlerBase):
             return False
         return True
 
-    def _CallHelix(self, sender, command, args=()):
-        url = url_parse.urlunsplit(
-            ('https', 'api.twitch.tv', 'helix/%s' % command,
-             url_parse.urlencode(args, doseq=True), ''))
-        headers = {'Client-ID': self._client_id}
-        req = requests.get(url, headers=headers)
-        if req.status_code != 200:
-            self._ReportError(
-                sender, 'Twitch API /helix/%s call failed: %s %s', command,
-                req.status_code, req.reason, level=logging.ERROR)
-            return None
-        result = req.json()
-        if not result or 'data' not in result:
-            self._ReportError(
-                sender, "Twitch API /helix/%s call missing 'data' field",
-                level=logging.ERROR)
-            return None
-        return result['data']
-
     def _GetCurrentGame(self, sender):
         """Get the current game set on a channel using Twitch API.
 
-            TODO(dizzy): if other code starts using Twitch API, make an internal
-            helper library for it.
+            TODO(dizzy): Consider making these ops of the Helix class API.
         """
         # Drop "#" from the start of the channel name, Twitch doesn't need it.
         if len(self._channel) < 2:
             logging.warning('Unexpectadly short channel name: %r',
                             self._channel)
             return None
-        data = self._CallHelix(sender, 'streams',
-                               {'user_login': self._channel[1:]})
+        data = self._helix.Call('streams', {'user_login': self._channel[1:]})
         if data is None:
             return None
         if not data or 'game_id' not in data[0]:
@@ -159,7 +137,7 @@ class Handler(irc.HandlerBase):
                 sender, 'Missing game_id on channel (channel offline?)')
             return None
 
-        data = self._CallHelix(sender, 'games', {'id': data[0]['game_id']})
+        data = self._helix.Call('games', {'id': data[0]['game_id']})
         if data is None:
             return None
         if not data or 'name' not in data[0]:
