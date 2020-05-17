@@ -120,6 +120,25 @@ class Handler(irc.HandlerBase):
             return False
         return True
 
+    def _CallHelix(self, sender, command, args=()):
+        url = url_parse.urlunsplit(
+            ('https', 'api.twitch.tv', 'helix/%s' % command,
+             url_parse.urlencode(args, doseq=True), ''))
+        headers = {'Client-ID': self._client_id}
+        req = requests.get(url, headers=headers)
+        if req.status_code != 200:
+            self._ReportError(
+                sender, 'Twitch API /helix/%s call failed: %s %s', command,
+                req.status_code, req.reason, level=logging.ERROR)
+            return None
+        result = req.json()
+        if not result or 'data' not in result:
+            self._ReportError(
+                sender, "Twitch API /helix/%s call missing 'data' field",
+                level=logging.ERROR)
+            return None
+        return result['data']
+
     def _GetCurrentGame(self, sender):
         """Get the current game set on a channel using Twitch API.
 
@@ -131,24 +150,22 @@ class Handler(irc.HandlerBase):
             logging.warning('Unexpectadly short channel name: %r',
                             self._channel)
             return None
-        channel = self._channel[1:]
-        url = ('https://api.twitch.tv/kraken/channels/%s' %
-               url_parse.quote(channel))
-        headers = {'ACCEPT': 'application/vnd.twitchtv.v3+json',
-                   'Client-ID': self._client_id,
-                   'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:6.0) '
-                       'Gecko/20100101 Firefox/6.0'}
-        req = requests.get(url, headers=headers)
-        if req.status_code != 200:
+        data = self._CallHelix(sender, 'streams',
+                               {'user_login': self._channel[1:]})
+        if data is None:
+            return None
+        if not data or 'game_id' not in data[0]:
             self._ReportError(
-                    sender, 'Twitch API game name request failed: %s %s',
-                    req.status_code, req.reason, level=logging.ERROR)
+                sender, 'Missing game_id on channel (channel offline?)')
             return None
-        game = req.json()
-        if not game or 'game' not in game:
-            self._ReportError(sender, 'Got empty game name')
+
+        data = self._CallHelix(sender, 'games', {'id': data[0]['game_id']})
+        if data is None:
             return None
-        return game['game']
+        if not data or 'name' not in data[0]:
+            self._ReportError(sender, 'Missing game name in query')
+            return None
+        return data[0]['name']
 
     def _AddQuoteToDb(self, quote):
         """Adds the given quote to the database."""
