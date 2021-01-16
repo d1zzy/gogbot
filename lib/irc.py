@@ -110,7 +110,7 @@ class Connection:
     """Code logic for formatting and parsing IRC messages."""
 
     _BUFFER_SIZE = 1048576  # 1Mb.
-    _MAX_IRC_LINE = 510  # 512 including \r\n.
+    _MAX_IRC_LINE = 2046  # 2048 including \r\n.
 
     def __init__(self, log_traffic=False):
         self._log_traffic = log_traffic
