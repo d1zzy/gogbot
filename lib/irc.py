@@ -191,7 +191,7 @@ class Connection:
     def PartChannel(self, chan):
         self.SendRaw('PART %s' % chan)
 
-    def _CloseConnectionInput():
+    def _CloseConnectionInput(self):
         """Closes the input part of the connection."""
         self._selector.unregister(self._conn)
         self._selector = None
