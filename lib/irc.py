@@ -195,7 +195,7 @@ class Connection:
         """Closes the input part of the connection."""
         self._selector.unregister(self._conn)
         self._selector = None
-        socket.shutdown(socket.SHUT_RD)
+        self._conn.shutdown(socket.SHUT_RD)
 
     def _ReadMoreData(self, timeout):
         # Wait for data to be available.
